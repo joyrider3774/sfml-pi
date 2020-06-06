@@ -418,37 +418,50 @@ void DRMContext::display()
     evctx.version = 2;
     evctx.page_flip_handler = page_flip_handler;
 
-    int ret = drmModePageFlip( my_drm.fd, my_drm.crtc_id, fb->fb_id,
-        DRM_MODE_PAGE_FLIP_EVENT, &waiting_for_flip );
+	int ret = 0;
+	
+	char *env_val = getenv("SFML_DRM_FLIP_ASYNC");
+	
+	if ((env_val != NULL) && (strcmp(env_val, "1") == 0))
+	{
+		ret = drmModePageFlip( my_drm.fd, my_drm.crtc_id, fb->fb_id,
+			DRM_MODE_PAGE_FLIP_ASYNC, &waiting_for_flip );
+	}
+	else
+	{
+		ret = drmModePageFlip( my_drm.fd, my_drm.crtc_id, fb->fb_id,
+			DRM_MODE_PAGE_FLIP_EVENT, &waiting_for_flip );
 
-    if ( ret )
-        return;
 
-    while ( waiting_for_flip )
-    {
-        FD_ZERO( &fds );
-        FD_SET( 0, &fds );
-        FD_SET( my_drm.fd, &fds );
+		if ( ret )
+			return;
 
-        ret = select( my_drm.fd + 1, &fds, NULL, NULL, NULL );
-        if ( ret < 0 )
-        {
-            // select err
-            err() << "Error on select() after drm page flip" << std::endl;
-            return;
-        }
-        else if ( ret == 0 )
-        {
-            // select timeout
-            return;
-        }
-        else if ( FD_ISSET( 0, &fds ) )
-        {
-            // user interrupted
-            return;
-        }
-        drmHandleEvent( my_drm.fd, &evctx );
-    }
+		while ( waiting_for_flip )
+		{
+			FD_ZERO( &fds );
+			FD_SET( 0, &fds );
+			FD_SET( my_drm.fd, &fds );
+
+			ret = select( my_drm.fd + 1, &fds, NULL, NULL, NULL );
+			if ( ret < 0 )
+			{
+				// select err
+				err() << "Error on select() after drm page flip" << std::endl;
+				return;
+			}
+			else if ( ret == 0 )
+			{
+				// select timeout
+				return;
+			}
+			else if ( FD_ISSET( 0, &fds ) )
+			{
+				// user interrupted
+				return;
+			}
+			drmHandleEvent( my_drm.fd, &evctx );
+		}
+	}
 
     if ( m_last_bo )
         gbm_surface_release_buffer( m_gbm_surface, m_last_bo );
